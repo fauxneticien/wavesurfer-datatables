@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Transcription Table with Waveform & Replace</title>
+
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <!-- Wavesurfer.js -->
+  <script src="https://unpkg.com/wavesurfer.js@7"></script>
+  <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+
+  <style>
+    #waveform {
+      width: 100%;
+      height: 128px;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+    }
+
+    .play-btn {
+      cursor: pointer;
+      padding: 4px 10px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 5px;
+      width: 400px;
+    }
+
+    .modal-content label,
+    .modal-content input,
+    .modal-content select {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+    }
+
+    /* Highlight style for the DataTable row */
+    tr.highlighted {
+      background-color: #ffeb3b !important;
+    }
+
+    #transcriptionTableContainer {
+        height: 500px;
+        overflow-y: scroll;
+    }
+
+  </style>
+</head>
+<body>
+
+  <h2>wavesurfer.js + dataTables.js</h2>
+
+  <!-- Waveform -->
+  <div id="waveform"></div>
+
+  <!-- Replace Modal Trigger -->
+  <button id="openModal">🔍 Search & Replace</button>
+
+  <div id="transcriptionTableContainer">
+
+    <!-- Transcription Table -->
+    <table id="transcriptionTable" class="display" style="width:100%">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Play</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Speaker</th>
+            <th>Language</th>
+            <th>Transcription</th>
+        </tr>
+        </thead>
+    </table>
+
+  </div>
+
+  <!-- Replace Modal -->
+  <div id="replaceModal" class="modal">
+    <div class="modal-content">
+      <h3>Search and Replace</h3>
+      <label for="columnSelect">Column:</label>
+      <select id="columnSelect">
+        <option value="4">Speaker</option>
+        <option value="5">Language</option>
+        <option value="6">Transcription</option>
+      </select>
+      <label for="searchText">Search for:</label>
+      <input type="text" id="searchText" />
+      <label for="replaceText">Replace with:</label>
+      <input type="text" id="replaceText" />
+      <button id="doReplace">Replace</button>
+      <button id="closeModal">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const transcriptionData = [
+        {"start": 0.790344, "end": 1.600344, "speaker": "SPEAKER_00", "language": "English", "transcription": "It is a great honor."},
+        {"start": 2.292219, "end": 3.034719, "speaker": "SPEAKER_00", "language": "English", "transcription": "To address."},
+        {"start": 3.186594, "end": 4.823469, "speaker": "SPEAKER_00", "language": "English", "transcription": "this assembly for the second time."},
+        {"start": 5.734719, "end": 7.506594, "speaker": "SPEAKER_00", "language": "English", "transcription": "Nearly two years after my election,"},
+        {"start": 7.844094, "end": 9.852219, "speaker": "SPEAKER_00", "language": "English", "transcription": "as President of the United States."},
+        {"start": 10.847844, "end": 12.771594, "speaker": "SPEAKER_01", "language": "French", "transcription": "Notre organisation, l'ONU,"},
+        {"start": 13.159719, "end": 14.020344, "speaker": "SPEAKER_01", "language": "French", "transcription": "célèbre"},
+        {"start": 14.847219, "end": 16.416594, "speaker": "SPEAKER_01", "language": "French", "transcription": "son 70e anniversaire."},
+        {"start": 17.648469, "end": 20.517219, "speaker": "SPEAKER_00", "language": "French", "transcription": "We know this is no ordinary time for our people."},
+        {"start": 21.428469, "end": 23.858469, "speaker": "SPEAKER_01", "language": "French", "transcription": "Des progrès immenses ont été accomplis"},
+        {"start": 24.297219, "end": 25.309719, "speaker": "SPEAKER_01", "language": "French", "transcription": "depuis..."},
+        {"start": 26.474094, "end": 27.435969, "speaker": "SPEAKER_01", "language": "French", "transcription": "cette création"},
+        {"start": 28.279719, "end": 29.444094, "speaker": "SPEAKER_00", "language": "English", "transcription": "Each of us comes here"},
+        {"start": 29.680344, "end": 30.912219, "speaker": "SPEAKER_00", "language": "English", "transcription": "with our own problems."},
+        {"start": 31.232844, "end": 31.958469, "speaker": "SPEAKER_00", "language": "English", "transcription": "and priority."},
+        {"start": 31.722219, "end": 33.696594, "speaker": "SPEAKER_01", "language": "French", "transcription": "celle d'une institution chargée"},
+        {"start": 34.506594, "end": 35.384094, "speaker": "SPEAKER_01", "language": "French", "transcription": "de maintenir la paix."},
+        {"start": 36.413469, "end": 37.594719, "speaker": "SPEAKER_01", "language": "French", "transcription": "Elle y est parvenue."},
+        {"start": 38.522844, "end": 39.704094, "speaker": "SPEAKER_01", "language": "French", "transcription": "dans de nombreuses occasions."},
+        {"start": 39.096594, "end": 42.032844, "speaker": "SPEAKER_00", "language": "English", "transcription": "There are also challenges that we share in common."},
+        {"start": 42.775344, "end": 43.551594, "speaker": "SPEAKER_00", "language": "English", "transcription": "as leaders"},
+        {"start": 44.142219, "end": 44.901594, "speaker": "SPEAKER_00", "language": "English", "transcription": "and as nations"},
+        {"start": 45.863469, "end": 48.344094, "speaker": "SPEAKER_01", "language": "French", "transcription": "Et pourtant, 70 ans après..."},
+        {"start": 49.491594, "end": 52.107219, "speaker": "SPEAKER_01", "language": "French", "transcription": "il y a toujours des drames, des tragédies"},
+        {"start": 52.883469, "end": 53.980344, "speaker": "SPEAKER_01", "language": "French", "transcription": "des conflits et des guerres."},
+        {"start": 55.448469, "end": 55.954719, "speaker": "SPEAKER_00", "language": "English", "transcription": "We meet."},
+        {"start": 56.410344, "end": 58.013469, "speaker": "SPEAKER_00", "language": "English", "transcription": "within an institution built"},
+        {"start": 58.688469, "end": 59.447844, "speaker": "SPEAKER_00", "language": "English", "transcription": "from the rubble."},
+        {"start": 59.835969, "end": 60.359094, "speaker": "SPEAKER_00", "language": "English", "transcription": "of war"},
+        {"start": 61.675344, "end": 64.797219, "speaker": "SPEAKER_00", "language": "English", "transcription": "designed to unite the world in pursuit of peace."},
+        {"start": 65.590344, "end": 66.847684, "speaker": "SPEAKER_01", "language": "French", "transcription": "Et le monde.."},
+        {"start": 68.239719, "end": 68.847219, "speaker": "SPEAKER_01", "language": "French", "transcription": "doit"},
+        {"start": 69.049719, "end": 72.407844, "speaker": "SPEAKER_01", "language": "French", "transcription": "une fois encore relevé des défis considérables."},
+        {"start": 73.285344, "end": 73.875969, "speaker": "SPEAKER_00", "language": "English", "transcription": "We meet"},
+        {"start": 74.196594, "end": 75.040344, "speaker": "SPEAKER_00", "language": "English", "transcription": "within a city"},
+        {"start": 75.968469, "end": 78.465969, "speaker": "SPEAKER_00", "language": "English", "transcription": "that for centuries has welcomed people"},
+        {"start": 78.820344, "end": 79.799094, "speaker": "SPEAKER_00", "language": "English", "transcription": "from across the globe."}
+        ];
+
+    let dataTable;
+    let wavesurfer;
+    let regionMap = {};
+
+    const regionsPlugin = window.WaveSurfer.Regions.create();
+
+    function flashRegionBackground(region, newColor = 'red', duration = 1000) {
+        // Save original background color
+        const originalColor = region.element.style.backgroundColor;
+
+        region_row = parseInt(region.content.innerHTML) - 1
+        scrollToDataTableRow(region_row)
+        $(dataTable.row(region_row).node()).addClass('highlighted')
+
+        // Change to new background color
+        region.element.style.backgroundColor = newColor;
+
+        // Set timeout to revert it back after 'duration' milliseconds
+        setTimeout(() => {
+            region.element.style.backgroundColor = originalColor;
+            $(dataTable.row(region_row).node()).removeClass('highlighted')
+        }, duration);
+    }
+
+    function scrollToDataTableRow(rowIndex) {
+        const table = $('#transcriptionTable').DataTable();
+        const row = table.row(rowIndex);
+
+        if (!row.node()) {
+            console.warn(`Row ${rowIndex} not found in DOM.`);
+            return;
+        }
+
+        const $container = $('#transcriptionTableContainer');
+        const $row = $(row.node());
+
+        // Calculate position relative to container
+        const rowOffset = $row.offset().top;
+        const containerOffset = $container.offset().top;
+        const scrollTop = $container.scrollTop();
+
+        const relativeTop = rowOffset - containerOffset;
+
+        $container.animate({
+            scrollTop: scrollTop + relativeTop
+        }, 300);
+    }
+
+    $(document).ready(function () {
+      // Initialize WaveSurfer
+      wavesurfer = WaveSurfer.create({
+        container: '#waveform',
+        waveColor: '#d9dcff',
+        progressColor: '#d9dcff',
+        cursorColor: '#0000ff',
+        height: 128,
+        backend: 'mediaelement',
+        plugins: [
+          regionsPlugin
+        ]
+      });
+
+      wavesurfer.load('obama-hollande.mp3');
+
+      // Once ready, add regions
+      wavesurfer.on('ready', () => {
+        transcriptionData.forEach((item, index) => {
+          const region = regionsPlugin.addRegion({
+            start: item.start,
+            end: item.end,
+            color: 'rgba(76, 175, 80, 0.2)', // default green-ish
+            drag: false,
+            resize: false,
+            content: (index + 1).toString()
+          });
+          regionMap[index + 1] = region;
+        });
+      });
+
+      // Click region to play and highlight region + table row
+      regionsPlugin.on('region-double-clicked', (region, e) => {
+
+        flashRegionBackground(region, 'yellow', 1500);
+
+        e.stopPropagation();
+
+        // Stop any previous playback or remove listeners if needed
+        wavesurfer.play(region.start);
+
+        // Listen for playback time update and stop at region.end
+        const onAudioprocess = (time) => {
+            if (time >= region.end) {
+            wavesurfer.pause();
+            wavesurfer.un('audioprocess', onAudioprocess); // Remove this listener
+            }
+        };
+
+        wavesurfer.on('audioprocess', onAudioprocess);
+
+      });
+
+      // Initialize DataTable
+      dataTable = $('#transcriptionTable').DataTable({
+        paging: false,
+        data: transcriptionData,
+        columns: [
+          {
+            data: null,
+            render: (data, type, row, meta) => meta.row + 1
+          },
+          {
+            data: null,
+            orderable: false,
+            searchable: false,
+            render: (data, type, row, meta) => {
+              return `<button class="play-btn" data-start="${row.start}" data-end="${row.end}">▶️ Play</button>`;
+            }
+          },
+          { data: 'start' },
+          { data: 'end' },
+          { data: 'speaker' },
+          { data: 'language' },
+          { data: 'transcription' }
+        ],
+        createdRow: function (row, data, dataIndex) {
+          $(row).find('.play-btn').on('click', function () {
+            region = regionMap[(dataIndex + 1).toString()]
+
+            const dblClickEvent = new MouseEvent('dblclick', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+            });
+
+            // Trigger the event on the region's element
+            region.element.dispatchEvent(dblClickEvent);
+
+          });
+        }
+      });
+
+      // Search & Replace Modal Logic
+      const modal = $('#replaceModal');
+
+      $('#openModal').on('click', () => {
+        $('#searchText').val('');
+        $('#replaceText').val('');
+        modal.show();
+      });
+
+      $('#closeModal').on('click', () => modal.hide());
+
+      $('#doReplace').on('click', () => {
+        const colIndex = parseInt($('#columnSelect').val());
+        const searchVal = $('#searchText').val();
+        const replaceVal = $('#replaceText').val();
+
+        const keys = ['speaker', 'language', 'transcription'];
+        const key = keys[colIndex - 4]; // Adjust for column offset
+
+        dataTable.rows().every(function () {
+          const data = this.data();
+          if (data[key].includes(searchVal)) {
+            data[key] = data[key].split(searchVal).join(replaceVal);
+            this.data(data).invalidate();
+          }
+        });
+
+        dataTable.draw(false);
+        modal.hide();
+      });
+
+      // Close modal when clicking outside
+      window.onclick = function (event) {
+        if (event.target === modal[0]) {
+          modal.hide();
+        }
+        };
+
+        $('#transcriptionTable tbody').on('dblclick', 'tr', function () {
+            const regionIndex = (dataTable.row(this).index() + 1).toString()
+            region = regionMap[regionIndex]
+
+            const dblClickEvent = new MouseEvent('dblclick', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+            });
+
+            // Trigger the event on the region's element
+            region.element.dispatchEvent(dblClickEvent);
+        });
+    });
+  </script>
+
+</body>
+</html>
