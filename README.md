@@ -44,7 +44,7 @@ Automatic diarisers won't know speaker identity. Allow bulk search-and-replace t
 
 ![](docs/assets/README_search-and-replace.gif)
 
-### Regions/rows merge
+### TODO: Regions/rows merge
 
 - Shift + Click multiple regions/rows
 - Click merge (require regions/rows)
@@ -54,7 +54,7 @@ Automatic diarisers won't know speaker identity. Allow bulk search-and-replace t
   - Pre-filled values of various cell texts concatenated
 - Merge updates both wavesurfer regions and datatable rows
 
-### Regions/rows split
+### TODO: Regions/rows split
 
 - Click waveform to place cursor
 - Get active region and cursor time
