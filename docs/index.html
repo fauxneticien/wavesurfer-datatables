@@ -150,7 +150,7 @@
   <div id="mergeModal" class="modal">
     <div class="modal-content">
       <h3>Merge Regions</h3>
-      <p><strong>Start:</strong> <span id="mergeStart"></span> &nbsp; <strong>End:</strong> <span id="mergeEnd"></span></p>
+      <p><strong>Start:</strong> <span id="mergeStart"></span>s &nbsp; <strong>End:</strong> <span id="mergeEnd"></span>s &nbsp; <button id="playMerge">▶ Play</button></p>
       <label for="mergeSpeaker">Speaker:</label>
       <input type="text" id="mergeSpeaker" />
       <label for="mergeLanguage">Language:</label>
@@ -168,7 +168,7 @@
       <h3>Split Region at <span id="splitCursorTime"></span>s</h3>
       <div class="split-halves">
         <div class="split-half">
-          <h4>Region 1</h4>
+          <h4>Region 1 &nbsp; <button id="playSplit1">▶ Play</button></h4>
           <p><strong>Start:</strong> <span id="split1Start"></span>s &nbsp; <strong>End:</strong> <span id="split1End"></span>s</p>
           <label for="split1Speaker">Speaker:</label>
           <input type="text" id="split1Speaker" />
@@ -178,7 +178,7 @@
           <textarea id="split1Transcription" rows="4"></textarea>
         </div>
         <div class="split-half">
-          <h4>Region 2</h4>
+          <h4>Region 2 &nbsp; <button id="playSplit2">▶ Play</button></h4>
           <p><strong>Start:</strong> <span id="split2Start"></span>s &nbsp; <strong>End:</strong> <span id="split2End"></span>s</p>
           <label for="split2Speaker">Speaker:</label>
           <input type="text" id="split2Speaker" />
@@ -360,25 +360,21 @@
 
       // Click region to play and highlight region + table row
       regionsPlugin.on('region-double-clicked', (region, e) => {
-
         flashRegionBackground(region, 'yellow', 1500);
-
         e.stopPropagation();
-
-        // Stop any previous playback or remove listeners if needed
-        wavesurfer.play(region.start);
-
-        // Listen for playback time update and stop at region.end
-        const onAudioprocess = (time) => {
-            if (time >= region.end) {
-            wavesurfer.pause();
-            wavesurfer.un('audioprocess', onAudioprocess); // Remove this listener
-            }
-        };
-
-        wavesurfer.on('audioprocess', onAudioprocess);
-
+        playSegment(region.start, region.end);
       });
+
+      function playSegment(start, end) {
+        wavesurfer.play(start);
+        const onAudioprocess = (time) => {
+          if (time >= end) {
+            wavesurfer.pause();
+            wavesurfer.un('audioprocess', onAudioprocess);
+          }
+        };
+        wavesurfer.on('audioprocess', onAudioprocess);
+      }
 
       // Single-click region: select/deselect and seek cursor to click position
       regionsPlugin.on('region-clicked', (region, e) => {
@@ -539,6 +535,10 @@
 
       $('#cancelMerge').on('click', () => $('#mergeModal').hide());
 
+      $('#playMerge').on('click', () => {
+        playSegment(parseFloat($('#mergeStart').text()), parseFloat($('#mergeEnd').text()));
+      });
+
       // Split button: validate cursor is inside the selected region, then open modal
       $('#splitBtn').on('click', () => {
         const key = [...selectedIndices][0];
@@ -595,6 +595,14 @@
       });
 
       $('#cancelSplit').on('click', () => $('#splitModal').hide());
+
+      $('#playSplit1').on('click', () => {
+        playSegment(parseFloat($('#split1Start').text()), parseFloat($('#split1End').text()));
+      });
+
+      $('#playSplit2').on('click', () => {
+        playSegment(parseFloat($('#split2Start').text()), parseFloat($('#split2End').text()));
+      });
 
     });
   </script>
