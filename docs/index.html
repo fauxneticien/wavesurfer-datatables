@@ -17,8 +17,20 @@
     #waveform {
       width: 100%;
       height: 128px;
-      margin-bottom: 20px;
       border: 1px solid #ccc;
+      overflow-x: auto;
+    }
+
+    #zoomControl {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
+
+    #zoomSlider {
+      width: 160px;
     }
 
     .play-btn {
@@ -102,6 +114,14 @@
 
   <!-- Waveform -->
   <div id="waveform"></div>
+
+  <!-- Zoom control -->
+  <div id="zoomControl">
+    <span>🔍 Zoom:</span>
+    <input type="range" id="zoomSlider" min="1" max="500" step="5" />
+    <span id="zoomLabel">—</span>
+    <button id="zoomReset">Fit</button>
+  </div>
 
   <!-- Toolbar buttons -->
   <button id="openModal">🔍 Search & Replace</button>
@@ -238,6 +258,7 @@
     let wavesurfer;
     let regionMap = {};
     let selectedIndices = new Set();
+    let initialZoom = 0;
 
     const regionsPlugin = window.WaveSurfer.Regions.create();
 
@@ -343,7 +364,7 @@
 
       wavesurfer.load('assets/obama-hollande.mp3');
 
-      // Once ready, add regions
+      // Once ready, add regions and calibrate zoom slider
       wavesurfer.on('ready', () => {
         transcriptionData.forEach((item, index) => {
           const region = regionsPlugin.addRegion({
@@ -356,6 +377,10 @@
           });
           regionMap[index + 1] = region;
         });
+
+        initialZoom = Math.round(document.querySelector('#waveform').clientWidth / wavesurfer.getDuration());
+        $('#zoomSlider').attr({ min: initialZoom, value: initialZoom });
+        $('#zoomLabel').text(initialZoom + ' px/s');
       });
 
       // Click region to play and highlight region + table row
@@ -375,6 +400,19 @@
         };
         wavesurfer.on('audioprocess', onAudioprocess);
       }
+
+      // Zoom slider
+      $('#zoomSlider').on('input', function () {
+        const val = parseInt(this.value);
+        wavesurfer.zoom(val);
+        $('#zoomLabel').text(val + ' px/s');
+      });
+
+      $('#zoomReset').on('click', () => {
+        wavesurfer.zoom(initialZoom);
+        $('#zoomSlider').val(initialZoom);
+        $('#zoomLabel').text(initialZoom + ' px/s');
+      });
 
       // Single-click region: select/deselect and seek cursor to click position
       regionsPlugin.on('region-clicked', (region, e) => {
