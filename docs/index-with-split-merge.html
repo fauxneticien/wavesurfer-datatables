@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Transcription Table with Waveform & Replace</title>
+
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <!-- Wavesurfer.js -->
+  <script src="https://unpkg.com/wavesurfer.js@7"></script>
+  <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+
+  <style>
+    #waveform {
+      width: 100%;
+      height: 128px;
+      border: 1px solid #ccc;
+      overflow-x: auto;
+    }
+
+    #zoomControl {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
+
+    #zoomSlider {
+      width: 160px;
+    }
+
+    .play-btn {
+      cursor: pointer;
+      padding: 4px 10px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 5px;
+      width: 400px;
+    }
+
+    .modal-content label,
+    .modal-content input,
+    .modal-content select {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+    }
+
+    /* Highlight style for the DataTable row */
+    tr.highlighted {
+      background-color: #ffeb3b !important;
+    }
+
+    #transcriptionTableContainer {
+        height: 500px;
+        overflow-y: scroll;
+    }
+
+    tr.selected-row {
+      background-color: #ffe0b2 !important;
+    }
+
+    .modal-content textarea {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      box-sizing: border-box;
+    }
+
+    .modal-content input {
+      box-sizing: border-box;
+    }
+
+    #splitModal .modal-content {
+      width: 680px;
+    }
+
+    .split-halves {
+      display: flex;
+      gap: 20px;
+    }
+
+    .split-half {
+      flex: 1;
+    }
+
+    .split-half h4 {
+      margin: 0 0 8px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <h2>wavesurfer.js + dataTables.js</h2>
+
+  <!-- Waveform -->
+  <div id="waveform"></div>
+
+  <!-- Zoom control -->
+  <div id="zoomControl">
+    <span>🔍 Zoom:</span>
+    <input type="range" id="zoomSlider" min="1" max="500" step="5" />
+    <span id="zoomLabel">—</span>
+    <button id="zoomReset">Fit</button>
+  </div>
+
+  <!-- Toolbar buttons -->
+  <button id="openModal">🔍 Search & Replace</button>
+  <button id="mergeBtn" disabled>⊕ Merge Selected</button>
+  <button id="splitBtn" disabled>✂ Split at Cursor</button>
+
+  <div id="transcriptionTableContainer">
+
+    <!-- Transcription Table -->
+    <table id="transcriptionTable" class="display" style="width:100%">
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Play</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Speaker</th>
+            <th>Language</th>
+            <th>Transcription</th>
+        </tr>
+        </thead>
+    </table>
+
+  </div>
+
+  <!-- Replace Modal -->
+  <div id="replaceModal" class="modal">
+    <div class="modal-content">
+      <h3>Search and Replace</h3>
+      <label for="columnSelect">Column:</label>
+      <select id="columnSelect">
+        <option value="4">Speaker</option>
+        <option value="5">Language</option>
+        <option value="6">Transcription</option>
+      </select>
+      <label for="searchText">Search for:</label>
+      <input type="text" id="searchText" />
+      <label for="replaceText">Replace with:</label>
+      <input type="text" id="replaceText" />
+      <button id="doReplace">Replace</button>
+      <button id="closeModal">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Merge Modal -->
+  <div id="mergeModal" class="modal">
+    <div class="modal-content">
+      <h3>Merge Regions</h3>
+      <p><strong>Start:</strong> <span id="mergeStart"></span>s &nbsp; <strong>End:</strong> <span id="mergeEnd"></span>s &nbsp; <button id="playMerge">▶ Play</button></p>
+      <label for="mergeSpeaker">Speaker:</label>
+      <input type="text" id="mergeSpeaker" />
+      <label for="mergeLanguage">Language:</label>
+      <input type="text" id="mergeLanguage" />
+      <label for="mergeTranscription">Transcription:</label>
+      <textarea id="mergeTranscription" rows="4"></textarea>
+      <button id="doMerge">Merge</button>
+      <button id="cancelMerge">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Split Modal -->
+  <div id="splitModal" class="modal">
+    <div class="modal-content">
+      <h3>Split Region at <span id="splitCursorTime"></span>s</h3>
+      <div class="split-halves">
+        <div class="split-half">
+          <h4>Region 1 &nbsp; <button id="playSplit1">▶ Play</button></h4>
+          <p><strong>Start:</strong> <span id="split1Start"></span>s &nbsp; <strong>End:</strong> <span id="split1End"></span>s</p>
+          <label for="split1Speaker">Speaker:</label>
+          <input type="text" id="split1Speaker" />
+          <label for="split1Language">Language:</label>
+          <input type="text" id="split1Language" />
+          <label for="split1Transcription">Transcription:</label>
+          <textarea id="split1Transcription" rows="4"></textarea>
+        </div>
+        <div class="split-half">
+          <h4>Region 2 &nbsp; <button id="playSplit2">▶ Play</button></h4>
+          <p><strong>Start:</strong> <span id="split2Start"></span>s &nbsp; <strong>End:</strong> <span id="split2End"></span>s</p>
+          <label for="split2Speaker">Speaker:</label>
+          <input type="text" id="split2Speaker" />
+          <label for="split2Language">Language:</label>
+          <input type="text" id="split2Language" />
+          <label for="split2Transcription">Transcription:</label>
+          <textarea id="split2Transcription" rows="4"></textarea>
+        </div>
+      </div>
+      <button id="doSplit">Split</button>
+      <button id="cancelSplit">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const transcriptionData = [
+        {"start": 0.790344, "end": 1.600344, "speaker": "SPEAKER_00", "language": "English", "transcription": "It is a great honor."},
+        {"start": 2.292219, "end": 3.034719, "speaker": "SPEAKER_00", "language": "English", "transcription": "To address."},
+        {"start": 3.186594, "end": 4.823469, "speaker": "SPEAKER_00", "language": "English", "transcription": "this assembly for the second time."},
+        {"start": 5.734719, "end": 7.506594, "speaker": "SPEAKER_00", "language": "English", "transcription": "Nearly two years after my election,"},
+        {"start": 7.844094, "end": 9.852219, "speaker": "SPEAKER_00", "language": "English", "transcription": "as President of the United States."},
+        {"start": 10.847844, "end": 12.771594, "speaker": "SPEAKER_01", "language": "French", "transcription": "Notre organisation, l'ONU,"},
+        {"start": 13.159719, "end": 14.020344, "speaker": "SPEAKER_01", "language": "French", "transcription": "célèbre"},
+        {"start": 14.847219, "end": 16.416594, "speaker": "SPEAKER_01", "language": "French", "transcription": "son 70e anniversaire."},
+        {"start": 17.648469, "end": 20.517219, "speaker": "SPEAKER_00", "language": "French", "transcription": "We know this is no ordinary time for our people."},
+        {"start": 21.428469, "end": 23.858469, "speaker": "SPEAKER_01", "language": "French", "transcription": "Des progrès immenses ont été accomplis"},
+        {"start": 24.297219, "end": 25.309719, "speaker": "SPEAKER_01", "language": "French", "transcription": "depuis..."},
+        {"start": 26.474094, "end": 27.435969, "speaker": "SPEAKER_01", "language": "French", "transcription": "cette création"},
+        {"start": 28.279719, "end": 29.444094, "speaker": "SPEAKER_00", "language": "English", "transcription": "Each of us comes here"},
+        {"start": 29.680344, "end": 30.912219, "speaker": "SPEAKER_00", "language": "English", "transcription": "with our own problems."},
+        {"start": 31.232844, "end": 31.958469, "speaker": "SPEAKER_00", "language": "English", "transcription": "and priority."},
+        {"start": 31.722219, "end": 33.696594, "speaker": "SPEAKER_01", "language": "French", "transcription": "celle d'une institution chargée"},
+        {"start": 34.506594, "end": 35.384094, "speaker": "SPEAKER_01", "language": "French", "transcription": "de maintenir la paix."},
+        {"start": 36.413469, "end": 37.594719, "speaker": "SPEAKER_01", "language": "French", "transcription": "Elle y est parvenue."},
+        {"start": 38.522844, "end": 39.704094, "speaker": "SPEAKER_01", "language": "French", "transcription": "dans de nombreuses occasions."},
+        {"start": 39.096594, "end": 42.032844, "speaker": "SPEAKER_00", "language": "English", "transcription": "There are also challenges that we share in common."},
+        {"start": 42.775344, "end": 43.551594, "speaker": "SPEAKER_00", "language": "English", "transcription": "as leaders"},
+        {"start": 44.142219, "end": 44.901594, "speaker": "SPEAKER_00", "language": "English", "transcription": "and as nations"},
+        {"start": 45.863469, "end": 48.344094, "speaker": "SPEAKER_01", "language": "French", "transcription": "Et pourtant, 70 ans après..."},
+        {"start": 49.491594, "end": 52.107219, "speaker": "SPEAKER_01", "language": "French", "transcription": "il y a toujours des drames, des tragédies"},
+        {"start": 52.883469, "end": 53.980344, "speaker": "SPEAKER_01", "language": "French", "transcription": "des conflits et des guerres."},
+        {"start": 55.448469, "end": 55.954719, "speaker": "SPEAKER_00", "language": "English", "transcription": "We meet."},
+        {"start": 56.410344, "end": 58.013469, "speaker": "SPEAKER_00", "language": "English", "transcription": "within an institution built"},
+        {"start": 58.688469, "end": 59.447844, "speaker": "SPEAKER_00", "language": "English", "transcription": "from the rubble."},
+        {"start": 59.835969, "end": 60.359094, "speaker": "SPEAKER_00", "language": "English", "transcription": "of war"},
+        {"start": 61.675344, "end": 64.797219, "speaker": "SPEAKER_00", "language": "English", "transcription": "designed to unite the world in pursuit of peace."},
+        {"start": 65.590344, "end": 66.847684, "speaker": "SPEAKER_01", "language": "French", "transcription": "Et le monde.."},
+        {"start": 68.239719, "end": 68.847219, "speaker": "SPEAKER_01", "language": "French", "transcription": "doit"},
+        {"start": 69.049719, "end": 72.407844, "speaker": "SPEAKER_01", "language": "French", "transcription": "une fois encore relevé des défis considérables."},
+        {"start": 73.285344, "end": 73.875969, "speaker": "SPEAKER_00", "language": "English", "transcription": "We meet"},
+        {"start": 74.196594, "end": 75.040344, "speaker": "SPEAKER_00", "language": "English", "transcription": "within a city"},
+        {"start": 75.968469, "end": 78.465969, "speaker": "SPEAKER_00", "language": "English", "transcription": "that for centuries has welcomed people"},
+        {"start": 78.820344, "end": 79.799094, "speaker": "SPEAKER_00", "language": "English", "transcription": "from across the globe."}
+        ];
+
+    let dataTable;
+    let wavesurfer;
+    let regionMap = {};
+    let selectedIndices = new Set();
+    let initialZoom = 0;
+
+    const regionsPlugin = window.WaveSurfer.Regions.create();
+
+    function toggleSelection(key) {
+      const region = regionMap[key];
+      if (!region) return;
+      const tableNode = dataTable.row(key - 1).node();
+
+      if (selectedIndices.has(key)) {
+        selectedIndices.delete(key);
+        region.setOptions({ color: 'rgba(76, 175, 80, 0.2)' });
+        if (tableNode) $(tableNode).removeClass('selected-row');
+      } else {
+        selectedIndices.add(key);
+        region.setOptions({ color: 'rgba(255, 152, 0, 0.4)' });
+        if (tableNode) $(tableNode).addClass('selected-row');
+      }
+      updateActionButtons();
+    }
+
+    function updateActionButtons() {
+      const count = selectedIndices.size;
+      $('#mergeBtn').prop('disabled', count < 2);
+      $('#splitBtn').prop('disabled', count !== 1);
+    }
+
+    function rebuildFromData() {
+      Object.values(regionMap).forEach(r => r.remove());
+      regionMap = {};
+
+      transcriptionData.forEach((item, index) => {
+        const region = regionsPlugin.addRegion({
+          start: item.start,
+          end: item.end,
+          color: 'rgba(76, 175, 80, 0.2)',
+          drag: false,
+          resize: false,
+          content: (index + 1).toString()
+        });
+        regionMap[index + 1] = region;
+      });
+
+      dataTable.clear().rows.add(transcriptionData).draw();
+      selectedIndices.clear();
+      updateActionButtons();
+    }
+
+    function flashRegionBackground(region, newColor = 'red', duration = 1000) {
+        // Save original background color
+        const originalColor = region.element.style.backgroundColor;
+
+        region_row = parseInt(region.content.innerHTML) - 1
+        scrollToDataTableRow(region_row)
+        $(dataTable.row(region_row).node()).addClass('highlighted')
+
+        // Change to new background color
+        region.element.style.backgroundColor = newColor;
+
+        // Set timeout to revert it back after 'duration' milliseconds
+        setTimeout(() => {
+            region.element.style.backgroundColor = originalColor;
+            $(dataTable.row(region_row).node()).removeClass('highlighted')
+        }, duration);
+    }
+
+    function scrollToDataTableRow(rowIndex) {
+        const table = $('#transcriptionTable').DataTable();
+        const row = table.row(rowIndex);
+
+        if (!row.node()) {
+            console.warn(`Row ${rowIndex} not found in DOM.`);
+            return;
+        }
+
+        const $container = $('#transcriptionTableContainer');
+        const $row = $(row.node());
+
+        // Calculate position relative to container
+        const rowOffset = $row.offset().top;
+        const containerOffset = $container.offset().top;
+        const scrollTop = $container.scrollTop();
+
+        const relativeTop = rowOffset - containerOffset;
+
+        $container.animate({
+            scrollTop: scrollTop + relativeTop
+        }, 300);
+    }
+
+    $(document).ready(function () {
+      // Initialize WaveSurfer
+      wavesurfer = WaveSurfer.create({
+        container: '#waveform',
+        waveColor: '#d9dcff',
+        progressColor: '#d9dcff',
+        cursorColor: '#0000ff',
+        height: 128,
+        backend: 'mediaelement',
+        plugins: [
+          regionsPlugin
+        ]
+      });
+
+      wavesurfer.load('assets/obama-hollande.mp3');
+
+      // Once ready, add regions and calibrate zoom slider
+      wavesurfer.on('ready', () => {
+        transcriptionData.forEach((item, index) => {
+          const region = regionsPlugin.addRegion({
+            start: item.start,
+            end: item.end,
+            color: 'rgba(76, 175, 80, 0.2)', // default green-ish
+            drag: false,
+            resize: false,
+            content: (index + 1).toString()
+          });
+          regionMap[index + 1] = region;
+        });
+
+        initialZoom = Math.round(document.querySelector('#waveform').clientWidth / wavesurfer.getDuration());
+        $('#zoomSlider').attr({ min: initialZoom, value: initialZoom });
+        $('#zoomLabel').text(initialZoom + ' px/s');
+      });
+
+      // Click region to play and highlight region + table row
+      regionsPlugin.on('region-double-clicked', (region, e) => {
+        flashRegionBackground(region, 'yellow', 1500);
+        e.stopPropagation();
+        playSegment(region.start, region.end);
+      });
+
+      function playSegment(start, end) {
+        wavesurfer.play(start);
+        const onAudioprocess = (time) => {
+          if (time >= end) {
+            wavesurfer.pause();
+            wavesurfer.un('audioprocess', onAudioprocess);
+          }
+        };
+        wavesurfer.on('audioprocess', onAudioprocess);
+      }
+
+      // Zoom slider
+      $('#zoomSlider').on('input', function () {
+        const val = parseInt(this.value);
+        wavesurfer.zoom(val);
+        $('#zoomLabel').text(val + ' px/s');
+      });
+
+      $('#zoomReset').on('click', () => {
+        wavesurfer.zoom(initialZoom);
+        $('#zoomSlider').val(initialZoom);
+        $('#zoomLabel').text(initialZoom + ' px/s');
+      });
+
+      // Single-click region: select/deselect and seek cursor to click position
+      regionsPlugin.on('region-clicked', (region, e) => {
+        const key = parseInt(region.content.innerHTML);
+        toggleSelection(key);
+
+        const container = document.querySelector('#waveform');
+        const rect = container.getBoundingClientRect();
+        const relX = (e.clientX - rect.left) / rect.width;
+        wavesurfer.seekTo(Math.max(0, Math.min(1, relX)));
+      });
+
+      // Initialize DataTable
+      dataTable = $('#transcriptionTable').DataTable({
+        paging: false,
+        data: transcriptionData,
+        columns: [
+          {
+            data: null,
+            render: (data, type, row, meta) => meta.row + 1
+          },
+          {
+            data: null,
+            orderable: false,
+            searchable: false,
+            render: (data, type, row, meta) => {
+              return `<button class="play-btn" data-start="${row.start}" data-end="${row.end}">▶️ Play</button>`;
+            }
+          },
+          { data: 'start' },
+          { data: 'end' },
+          { data: 'speaker' },
+          { data: 'language' },
+          { data: 'transcription' }
+        ],
+        createdRow: function (row, data, dataIndex) {
+          $(row).find('.play-btn').on('click', function () {
+            region = regionMap[(dataIndex + 1).toString()]
+
+            const dblClickEvent = new MouseEvent('dblclick', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+            });
+
+            // Trigger the event on the region's element
+            region.element.dispatchEvent(dblClickEvent);
+
+          });
+        }
+      });
+
+      // Search & Replace Modal Logic
+      const modal = $('#replaceModal');
+
+      $('#openModal').on('click', () => {
+        $('#searchText').val('');
+        $('#replaceText').val('');
+        modal.show();
+      });
+
+      $('#closeModal').on('click', () => modal.hide());
+
+      $('#doReplace').on('click', () => {
+        const colIndex = parseInt($('#columnSelect').val());
+        const searchVal = $('#searchText').val();
+        const replaceVal = $('#replaceText').val();
+
+        const keys = ['speaker', 'language', 'transcription'];
+        const key = keys[colIndex - 4]; // Adjust for column offset
+
+        dataTable.rows().every(function () {
+          const data = this.data();
+          if (data[key].includes(searchVal)) {
+            data[key] = data[key].split(searchVal).join(replaceVal);
+            this.data(data).invalidate();
+          }
+        });
+
+        dataTable.draw(false);
+        modal.hide();
+      });
+
+      // Close modal when clicking outside
+      window.onclick = function (event) {
+        if (event.target === modal[0]) modal.hide();
+        if (event.target === $('#mergeModal')[0]) $('#mergeModal').hide();
+        if (event.target === $('#splitModal')[0]) $('#splitModal').hide();
+      };
+
+      $('#transcriptionTable tbody').on('dblclick', 'tr', function () {
+          const regionIndex = (dataTable.row(this).index() + 1).toString()
+          region = regionMap[regionIndex]
+
+          const dblClickEvent = new MouseEvent('dblclick', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+          });
+
+          // Trigger the event on the region's element
+          region.element.dispatchEvent(dblClickEvent);
+      });
+
+      // Single-click table row: select/deselect the corresponding region
+      $('#transcriptionTable tbody').on('click', 'tr', function () {
+        const idx = dataTable.row(this).index();
+        if (idx == null || idx === undefined) return;
+        toggleSelection(idx + 1);
+      });
+
+      // Merge button: open modal with pre-filled combined values
+      $('#mergeBtn').on('click', () => {
+        const sorted = [...selectedIndices]
+          .map(k => ({ k, data: transcriptionData[k - 1] }))
+          .sort((a, b) => a.data.start - b.data.start);
+
+        const first = sorted[0].data;
+        const last = sorted[sorted.length - 1].data;
+
+        $('#mergeStart').text(first.start.toFixed(3));
+        $('#mergeEnd').text(last.end.toFixed(3));
+        $('#mergeSpeaker').val(first.speaker);
+        $('#mergeLanguage').val(first.language);
+        $('#mergeTranscription').val(sorted.map(s => s.data.transcription).join(' '));
+
+        $('#mergeModal').show();
+      });
+
+      $('#doMerge').on('click', () => {
+        const sortedKeys = [...selectedIndices].sort((a, b) => a - b);
+        const sortedByStart = sortedKeys
+          .map(k => ({ k, data: transcriptionData[k - 1] }))
+          .sort((a, b) => a.data.start - b.data.start);
+
+        const newItem = {
+          start: sortedByStart[0].data.start,
+          end: sortedByStart[sortedByStart.length - 1].data.end,
+          speaker: $('#mergeSpeaker').val(),
+          language: $('#mergeLanguage').val(),
+          transcription: $('#mergeTranscription').val()
+        };
+
+        // Remove selected rows in reverse index order to preserve offsets
+        [...sortedKeys].reverse().forEach(k => transcriptionData.splice(k - 1, 1));
+
+        // Insert merged item at the correct sorted-by-start position
+        const insertIdx = transcriptionData.findIndex(item => item.start > newItem.start);
+        if (insertIdx === -1) {
+          transcriptionData.push(newItem);
+        } else {
+          transcriptionData.splice(insertIdx, 0, newItem);
+        }
+
+        $('#mergeModal').hide();
+        rebuildFromData();
+      });
+
+      $('#cancelMerge').on('click', () => $('#mergeModal').hide());
+
+      $('#playMerge').on('click', () => {
+        playSegment(parseFloat($('#mergeStart').text()), parseFloat($('#mergeEnd').text()));
+      });
+
+      // Split button: validate cursor is inside the selected region, then open modal
+      $('#splitBtn').on('click', () => {
+        const key = [...selectedIndices][0];
+        const item = transcriptionData[key - 1];
+        const cursor = wavesurfer.getCurrentTime();
+
+        if (cursor <= item.start || cursor >= item.end) {
+          alert('Place the cursor inside the selected region first.\nClick on the waveform within the highlighted (orange) region.');
+          return;
+        }
+
+        const cursorFixed = parseFloat(cursor.toFixed(3));
+
+        $('#splitCursorTime').text(cursorFixed);
+        $('#split1Start').text(item.start.toFixed(3));
+        $('#split1End').text(cursorFixed);
+        $('#split2Start').text(cursorFixed);
+        $('#split2End').text(item.end.toFixed(3));
+        $('#split1Speaker').val(item.speaker);
+        $('#split1Language').val(item.language);
+        $('#split1Transcription').val(item.transcription);
+        $('#split2Speaker').val(item.speaker);
+        $('#split2Language').val(item.language);
+        $('#split2Transcription').val(item.transcription);
+
+        $('#splitModal').data('splitKey', key).data('splitItem', item).show();
+      });
+
+      $('#doSplit').on('click', () => {
+        const key = $('#splitModal').data('splitKey');
+        const item = $('#splitModal').data('splitItem');
+        const cursorFixed = parseFloat($('#split1End').text());
+
+        const region1 = {
+          start: item.start,
+          end: cursorFixed,
+          speaker: $('#split1Speaker').val(),
+          language: $('#split1Language').val(),
+          transcription: $('#split1Transcription').val()
+        };
+
+        const region2 = {
+          start: cursorFixed,
+          end: item.end,
+          speaker: $('#split2Speaker').val(),
+          language: $('#split2Language').val(),
+          transcription: $('#split2Transcription').val()
+        };
+
+        transcriptionData.splice(key - 1, 1, region1, region2);
+
+        $('#splitModal').hide();
+        rebuildFromData();
+      });
+
+      $('#cancelSplit').on('click', () => $('#splitModal').hide());
+
+      $('#playSplit1').on('click', () => {
+        playSegment(parseFloat($('#split1Start').text()), parseFloat($('#split1End').text()));
+      });
+
+      $('#playSplit2').on('click', () => {
+        playSegment(parseFloat($('#split2Start').text()), parseFloat($('#split2End').text()));
+      });
+
+    });
+  </script>
+
+</body>
+</html>
